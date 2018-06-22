@@ -14,6 +14,7 @@ class RBM(nn.Module):
         self.num_visible = int(num_visible)
         self.num_hidden = int(num_hidden)
         self.stop_training = False
+        self.seed = seed
 
         if gpu and not torch.cuda.is_available():
             warnings.warn("Could not find GPU: will continue with CPU.",
