@@ -1,5 +1,6 @@
 from rbm import RBM
 import torch
+from torch.nn import functional as F
 import numpy as np
 
 
@@ -35,7 +36,8 @@ class SetRBMWeightEvolution:
             idx = np.transpose(non_zero_weight_indices[rand_indices])
 
             # Reinitialize weights corresponding to the selected indices
-            rbm.weights[idx] = (torch.randn(k) / np.sqrt(rbm.num_visible))
+            rbm.weights.data[idx] = (torch.randn_like(rbm.weights.data[idx])
+                                     / np.sqrt(rbm.num_visible))
 
 
 class SetRBM(RBM):
@@ -59,6 +61,16 @@ class SetRBM(RBM):
     def __repr__(self):
         return ("SetRBM(num_visible={}, num_hidden={}, gpu={})"
                 .format(self.num_visible, self.num_hidden, self.gpu))
+
+    def prob_v_given_h(self, h):
+        matmul = self.weights.t().mm(h.t()).t()
+        p = F.sigmoid(matmul.add(self.visible_bias))
+        return p
+
+    def prob_h_given_v(self, v):
+        matmul = self.weights.mm(v.t()).t()
+        p = F.sigmoid(matmul.add(self.hidden_bias))
+        return p
 
     def train(self, data, epochs, batch_size,
               k=10, persistent=False,
