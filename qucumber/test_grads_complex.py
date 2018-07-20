@@ -12,6 +12,7 @@ basis_data              = np.loadtxt('tools/benchmarks/data/2qubits_complex_RBMl
 
 unitary_dict            = unitaries.create_dict()
 
+# dictionary for full 4x4 unitaries
 full_unitary_file       = np.loadtxt('tools/benchmarks/data/2qubits_complex/2qubits_unitaries.txt')
 full_unitary_dictionary = {}
 
@@ -45,29 +46,26 @@ num_visible      = data.shape[-1]
 num_hidden_amp   = num_visible
 num_hidden_phase = num_visible
 
-
 rbm_complex = ComplexRBM(full_unitaries=full_unitary_dictionary,
                          psi_dictionary=psi_dictionary,
                          num_visible=num_visible,
                          num_hidden_amp=num_hidden_amp,
                          num_hidden_phase=num_hidden_phase)
 
-print (rbm_complex.rbm_amp.weights)
-
 vis         = rbm_complex.rbm_amp.generate_visible_space()
 Z           = rbm_complex.rbm_amp.partition(vis)
 k           = 100
 eps         = 1.e-8
-#alg_grads   = rbm_complex.compute_batch_gradients(unitary_dict, k, data, data, basis_data, basis_data)
+#alg_grads   = rbm_complex.compute_batch_gradients(unitary_dict, k, data, data, basis_data, basis_data) # Do not use this.
 alg_grads   = rbm_complex.compute_exact_gradients_KL(unitary_dict, k, data, data, basis_data, basis_data, vis, Z)
-
+# exact and non-exact gradients are accesible through compute_exact_gradients_KL
 
 def compute_numerical_KL(visible_space, Z):
     '''Computes the total KL divergence.
     '''
     KL = 0.0
-    #basis_list = ['Z' 'Z', 'X' 'Z', 'Z' 'X', 'Y' 'Z', 'Z' 'Y']
-    basis_list = ['Z' 'Z']
+    basis_list = ['Z' 'Z', 'X' 'Z', 'Z' 'X', 'Y' 'Z', 'Z' 'Y']
+    #basis_list = ['Z' 'Z']
 
     #Compute the KL divergence for the non computational bases.
     for i in range(len(basis_list)):
@@ -110,7 +108,8 @@ def compute_numerical_NLL(batch, Z):
 
 def compute_numerical_gradient(batch, visible_space, param, alg_grad, Z):
     eps = 1.e-8
-    print("Numerical NLL\t Numerical KL\t Alg.")
+    #print("Numerical NLL\t Numerical KL\t Alg.")
+    print("Numerical KL\t Alg.")
 
     for i in range(len(param)):
 
@@ -129,8 +128,12 @@ def compute_numerical_gradient(batch, visible_space, param, alg_grad, Z):
         num_gradKL  = (KL_pos - KL_neg) / (2*eps)
         num_gradNLL = (NLL_pos - NLL_neg) / (2*eps)
 
+        print("{: 10.8f}\t{: 10.8f}\t"
+              .format(num_gradKL, alg_grad[i]))
+        '''
         print("{: 10.8f}\t{: 10.8f}\t{: 10.8f}\t"
               .format(num_gradNLL, num_gradKL, alg_grad[i]))
+        '''
 
 def test_gradients(batch, visible_space, k, alg_grads):
     # key_list = ["weights_amp", "visible_bias_amp", "hidden_bias_amp", "weights_phase", "visible_bias_phase", "hidden_bias_phase"]

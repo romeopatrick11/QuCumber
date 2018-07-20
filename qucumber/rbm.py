@@ -517,7 +517,7 @@ class ComplexRBM:
     def __init__(self, full_unitaries, psi_dictionary, num_visible,
                  num_hidden_amp, num_hidden_phase, gpu=True,
                  seed=1234):
-
+        
         self.num_visible = int(num_visible)
         self.num_hidden_amp = int(num_hidden_amp)
         self.num_hidden_phase = int(num_hidden_phase)
@@ -528,7 +528,7 @@ class ComplexRBM:
         self.rbm_phase = BinomialRBMModule(num_visible, num_hidden_phase,
                                     zero_weights=True, gpu=gpu, seed=None)
         self.device = self.rbm_amp.device
-         
+        '''
         self.rbm_amp.weights        = nn.Parameter((torch.tensor(
                                              [[-0.8,0.3],[0.5,-0.2]], 
                                              device=self.rbm_amp.device, 
@@ -560,7 +560,7 @@ class ComplexRBM:
                                                   device=self.rbm_amp.device,
                                                   dtype = torch.double)), 
                                                  requires_grad = True)   
-        
+        '''
 
     def basis_state_generator(self, s):
         """Only works for binary visible units at the moment. Generates a vector
@@ -670,6 +670,8 @@ class ComplexRBM:
 
     def compute_batch_gradients(self, unitary_dict, k, pos_batch, neg_batch,
                                 pos_chars_batch, neg_chars_batch):
+        # have been working on compute_exact_gradients_KL mostly. This function has not been updated in a while.
+        # All gradients (exact, non-exact with gibbs sampling) are accesible within compute_exact_gradients_KL
         """This function will compute the gradients of a batch of the training
         data (data_file) given the basis measurements (chars_file).
 
@@ -887,27 +889,27 @@ class ComplexRBM:
             # Positive phase gradients for phase and amp. Will be added into
             # the 'A' parameters.
 
-            prob_amp    = F.sigmoid(F.linear(constructed_state,
+            prob_amp   = F.sigmoid(F.linear(constructed_state,
                                              self.rbm_amp.weights,
                                              self.rbm_amp.hidden_bias))
-            prob_phase  = F.sigmoid(F.linear(constructed_state,
+            prob_phase = F.sigmoid(F.linear(constructed_state,
                                              self.rbm_phase.weights,
                                              self.rbm_phase.hidden_bias))
 
             w_grad_amp  = torch.einsum("i,j->ij", (prob_amp, constructed_state))
             vb_grad_amp = constructed_state
             hb_grad_amp = prob_amp
-
+ 
             w_grad_phase  = torch.einsum("i,j->ij",
                                         (prob_phase, constructed_state))
             vb_grad_phase = constructed_state
             hb_grad_phase = prob_phase
 
-            """
-            In order to calculate the 'A' parameters below with the current
-            complex library, I need to make the weights and biases complex.
-            I fill the complex parts of the parameters with a tensor of zeros.
-            """
+            
+            #In order to calculate the 'A' parameters below with the current
+            #complex library, I need to make the weights and biases complex.
+            #I fill the complex parts of the parameters with a tensor of zeros.
+            
             temp_w_grad_amp  = cplx.make_complex_matrix(w_grad_amp,
                                                         zeros_for_w_amp)
             temp_vb_grad_amp = cplx.make_complex_vector(vb_grad_amp,
@@ -929,7 +931,7 @@ class ComplexRBM:
             A_weights_amp += cplx.MS_mult(temp, temp_w_grad_amp)
             A_vb_amp      += cplx.VS_mult(temp, temp_vb_grad_amp)
             A_hb_amp      += cplx.VS_mult(temp, temp_hb_grad_amp)
-
+            
             A_weights_phase += cplx.MS_mult(temp, temp_w_grad_phase)
             A_vb_phase      += cplx.VS_mult(temp, temp_vb_grad_phase)
             A_hb_phase      += cplx.VS_mult(temp, temp_hb_grad_phase)
@@ -938,12 +940,12 @@ class ComplexRBM:
             B += temp
 
         L_weights_amp = cplx.MS_divide(A_weights_amp, B)
-        L_vb_amp = cplx.VS_divide(A_vb_amp, B)
-        L_hb_amp = cplx.VS_divide(A_hb_amp, B)
+        L_vb_amp      = cplx.VS_divide(A_vb_amp, B)
+        L_hb_amp      = cplx.VS_divide(A_hb_amp, B)
 
         L_weights_phase = cplx.MS_divide(A_weights_phase, B)
-        L_vb_phase = cplx.VS_divide(A_vb_phase, B)
-        L_hb_phase = cplx.VS_divide(A_hb_phase, B)
+        L_vb_phase      = cplx.VS_divide(A_vb_phase, B)
+        L_hb_phase      = cplx.VS_divide(A_hb_phase, B)
 
         return [L_weights_amp, L_vb_amp, L_hb_amp, L_weights_phase, L_vb_phase,
                 L_hb_phase]
@@ -1013,23 +1015,24 @@ class ComplexRBM:
                 # rotated gradients.
                 g_weights_amp -= L_weights_amp[0] / pos_batch_size
                 g_vb_amp      -= L_vb_amp[0] / pos_batch_size
-                g_hb_amp      -= L_hb_amp[0] / pos_batch_size
+                g_hb_amp      -= L_hb_amp[0] / pos_batch_size 
 
                 # Gradents of phase parameters take the imaginary part of the
                 # rotated gradients.
                 g_weights_phase += L_weights_phase[1] / pos_batch_size
                 g_vb_phase      += L_vb_phase[1] / pos_batch_size
-                g_hb_phase      += L_hb_phase[1] / pos_batch_size
+                g_hb_phase      += L_hb_phase[1] / pos_batch_size 
             
-            ''' 
+            # Uncomment this block and comment out the for loop 20 lines below this to have gibbs sampling.
+            '''
             # positive phase with gibbs sampling 
             else:
+                print ('doing regular stuff')
                 prob = F.sigmoid(F.linear(v0, self.rbm_amp.weights, self.rbm_amp.hidden_bias))
                 
                 g_weights_amp -= torch.einsum("i,j->ij", (prob, v0)) / pos_batch_size
                 g_vb_amp      -= v0 / pos_batch_size
                 g_hb_amp      -= prob / pos_batch_size
-            
         
         # negative phase with gibbs sampling
         neg_batch, _, vk, hk, phk = self.rbm_amp.gibbs_sampling(k, neg_batch)
@@ -1039,50 +1042,35 @@ class ComplexRBM:
         g_vb_amp      += torch.einsum("ij->j", (vk,)) / neg_batch_size
         g_hb_amp      += torch.einsum("ij->j", (prob2,)) / neg_batch_size       
         '''
-         
-        for i in range(len(visible_space)):
-            prob = F.sigmoid(F.linear(visible_space[i], self.rbm_amp.weights,  
-                                      self.rbm_amp.hidden_bias))
-            w_grad = torch.ger(prob, visible_space[i])
-            vb_grad = (visible_space[i])
-            hb_grad = (prob)
+        basis_list = ['ZZ', 'XZ', 'ZX', 'YZ', 'ZY']
+        #basis_list = ['ZZ']
+        for j in range(len(basis_list)):
+            for i in range(len(visible_space)):
+                prob = F.sigmoid(F.linear(visible_space[i], self.rbm_amp.weights,  
+                                          self.rbm_amp.hidden_bias))
+                w_grad  = torch.ger(prob, visible_space[i])
+                vb_grad = (visible_space[i])
+                hb_grad = (prob)
 
-            RBM_psi  = self.normalized_wavefunction(visible_space, Z).view(2,-1)
-            true_psi = self.get_true_psi('ZZ').view(2,-1)
+                RBM_psi  = self.normalized_wavefunction(visible_space, Z).view(2,-1)
+                true_psi = self.get_true_psi(basis_list[j]).view(2,-1)
     
-            elementof_RBM_psi  = torch.tensor([RBM_psi[0][i],RBM_psi[1][i]]).view(2,1)
-            elementof_true_psi = torch.tensor([true_psi[0][i],true_psi[1][i]]).view(2,1)
+                elementof_RBM_psi  = torch.tensor([RBM_psi[0][i],RBM_psi[1][i]]).view(2,1)
+                elementof_true_psi = torch.tensor([true_psi[0][i],true_psi[1][i]]).view(2,1)
   
-            norm_RBM_psi  = cplx.inner_prod(elementof_RBM_psi,elementof_RBM_psi)[0]
-            norm_true_psi = cplx.inner_prod(elementof_true_psi,elementof_true_psi)[0]
+                norm_RBM_psi  = cplx.inner_prod(elementof_RBM_psi,elementof_RBM_psi)[0] # take real parts of the inner product, should be no imag. part
+                norm_true_psi = cplx.inner_prod(elementof_true_psi,elementof_true_psi)[0]
 
-            # NOTE  including these next three lines instead of having the "else" statement above gives exact gradients of zero... WTF
-            # SOMETHING WRONG WITH HOW IM WRITING THE POSITIVE PHASE?
-            
-            # exact positive phase 
-            g_weights_amp -= (norm_true_psi)*w_grad
-            g_vb_amp      -= (norm_true_psi)*vb_grad
-            g_hb_amp      -= (norm_true_psi)*hb_grad
-            
-            # exact negative phase
-            g_weights_amp += (norm_RBM_psi)*w_grad
-            g_vb_amp      += (norm_RBM_psi)*vb_grad
-            g_hb_amp      += (norm_RBM_psi)*hb_grad
-        
-        '''
-        for j in range(len(visible_space)):
-            prob2_amp = F.sigmoid(F.linear(visible_space[j], self.rbm_amp.weights,
-                                              self.rbm_amp.hidden_bias))
-
-            temp_weights_amp = (torch.einsum('i,j->ij',(prob2_amp, visible_space[j])))/neg_batch_size
-            temp_vb_amp      = (visible_space[j])/neg_batch_size
-            temp_hb_amp      = (prob2_amp)/neg_batch_size
-  
-            g_weights_amp   += (self.rbm_amp.probability(visible_space[j], Z))*temp_weights_amp
-            g_vb_amp        += (self.rbm_amp.probability(visible_space[j], Z))*temp_vb_amp
-            g_hb_amp        += (self.rbm_amp.probability(visible_space[j], Z))*temp_hb_amp
-        '''
+                # exact positive phase 
+                g_weights_amp -= (norm_true_psi)*w_grad
+                g_vb_amp      -= (norm_true_psi)*vb_grad
+                g_hb_amp      -= (norm_true_psi)*hb_grad
  
+                # exact negative phase
+                g_weights_amp += (norm_RBM_psi)*w_grad
+                g_vb_amp      += (norm_RBM_psi)*vb_grad
+                g_hb_amp      += (norm_RBM_psi)*hb_grad
+        
         """Return negative gradients to match up nicely with the usual
         parameter update rules, which *subtract* the gradient from
         the parameters. This is in contrast with the RBM update
@@ -1101,158 +1089,6 @@ class ComplexRBM:
                 "hidden_bias": g_hb_phase
             }
         }
-
-    def compute_exactrotated_grads_NLL(self, unitary_dict, k, v0, pos_characters,
-                              num_non_trivial_unitaries,
-                              z_indices, tau_indices):
-        """Computes the rotated gradients.
-
-        :param v0: A visible unit.
-        :type v0: torch.doubleTensor
-        :param characters: A string of characters corresponding to the basis
-                           that each site in v0 was measured in.
-        :type characters: str
-        :param num_non_trivial_unitaries: The number of sites in v0 that aren't
-                                          measured in the computational basis.
-        :type num_non_trivial_unitaries: int
-        :param z_indices: A list of indices that correspond to sites of v0 that
-                          are measured in the computational basis.
-        :type z_indices: list(int)
-        :param tau_indices: A list of indices that correspond to sites of v0
-                            that are not measured in the computational basis.
-        :type tau_indices: list(int)
-
-        :returns: Dictionary of the rotated gradients: L_weights_amp, L_vb_amp,
-                  L_hb_amp, L_weights_phase, L_vb_phase, L_hb_phase
-        :rtype: dict
-        """
-        """Initialize the 'A' parameters (see alg 4.2)."""
-        A_weights_amp = torch.zeros(2, self.rbm_amp.weights.size()[0],
-                                    self.rbm_amp.weights.size()[1],
-                                    device=self.device, dtype=torch.double)
-        A_vb_amp = torch.zeros(2, self.rbm_amp.visible_bias.size()[0],
-                               device=self.device, dtype=torch.double)
-        A_hb_amp = torch.zeros(2, self.rbm_amp.hidden_bias.size()[0],
-                               device=self.device, dtype=torch.double)
-
-        A_weights_phase = torch.zeros(2, self.rbm_phase.weights.size()[0],
-                                      self.rbm_phase.weights.size()[1],
-                                      device=self.device, dtype=torch.double)
-        A_vb_phase = torch.zeros(2, self.rbm_phase.visible_bias.size()[0],
-                                 device=self.device, dtype=torch.double)
-        A_hb_phase = torch.zeros(2, self.rbm_phase.hidden_bias.size()[0],
-                                 device=self.device, dtype=torch.double)
-        # 'B' will contain the coefficients of the rotated unnormalized
-        # wavefunction.
-        B = torch.zeros(2, device=self.device, dtype=torch.double)
-
-        w_grad_amp  = torch.zeros_like(self.rbm_amp.weights)
-        vb_grad_amp = torch.zeros_like(self.rbm_amp.visible_bias)
-        hb_grad_amp = torch.zeros_like(self.rbm_amp.hidden_bias)
-
-        w_grad_phase  = torch.zeros_like(self.rbm_phase.weights)
-        vb_grad_phase = torch.zeros_like(self.rbm_phase.visible_bias)
-        hb_grad_phase = torch.zeros_like(self.rbm_phase.hidden_bias)
-
-        zeros_for_w_amp     = torch.zeros_like(w_grad_amp)
-        zeros_for_w_phase   = torch.zeros_like(w_grad_phase)
-        zeros_for_vb        = torch.zeros_like(vb_grad_amp)
-        zeros_for_hb_amp    = torch.zeros_like(hb_grad_amp)
-        zeros_for_hb_phase  = torch.zeros_like(hb_grad_phase)
-
-        # Loop over Hilbert space of the non trivial unitaries to build
-        # the state.
-        for j in range(2**num_non_trivial_unitaries):
-            s = self.state_generator(num_non_trivial_unitaries)[j]
-            # Creates a matrix where the jth row is the desired state, |S>,
-            # a vector.
-
-            # This is the sigma state.
-            constructed_state = torch.zeros(self.num_visible, dtype=torch.double)
-
-            U = torch.tensor([1., 0.], dtype=torch.double, device=self.device)
-
-            # Populate the |sigma> state (aka constructed_state) accordingly.
-            for index in range(len(z_indices)):
-                # These are the sites in the computational basis.
-                constructed_state[z_indices[index]] = v0[z_indices[index]]
-
-            for index in range(len(tau_indices)):
-                # These are the sites that are NOT in the computational basis.
-                constructed_state[tau_indices[index]] = s[index]
-
-                aa = unitary_dict[pos_characters[tau_indices[index]]]
-                bb = self.basis_state_generator(v0[tau_indices[index]])
-                cc = self.basis_state_generator(s[index])
-
-                temp = cplx.inner_prod(cplx.MV_mult(
-                    cplx.compT_matrix(aa), bb), cc)
-
-                U = cplx.scalar_mult(U, temp)
-
-            # Positive phase gradients for phase and amp. Will be added into
-            # the 'A' parameters.
-
-            prob_amp = F.sigmoid(F.linear(constructed_state,
-                                          self.rbm_amp.weights,
-                                          self.rbm_amp.hidden_bias))
-            prob_phase = F.sigmoid(F.linear(constructed_state,
-                                            self.rbm_phase.weights,
-                                            self.rbm_phase.hidden_bias))
-
-            w_grad_amp  = torch.einsum("i,j->ij", (prob_amp, constructed_state))
-            vb_grad_amp = constructed_state
-            hb_grad_amp = prob_amp
-
-            w_grad_phase  = torch.einsum("i,j->ij",
-                                        (prob_phase, constructed_state))
-            vb_grad_phase = constructed_state
-            hb_grad_phase = prob_phase
-
-            """
-            In order to calculate the 'A' parameters below with the current
-            complex library, I need to make the weights and biases complex.
-            I fill the complex parts of the parameters with a tensor of zeros.
-            """
-            temp_w_grad_amp = cplx.make_complex_matrix(w_grad_amp,
-                                                       zeros_for_w_amp)
-            temp_vb_grad_amp = cplx.make_complex_vector(vb_grad_amp,
-                                                        zeros_for_vb)
-            temp_hb_grad_amp = cplx.make_complex_vector(hb_grad_amp,
-                                                        zeros_for_hb_amp)
-
-            temp_w_grad_phase = cplx.make_complex_matrix(w_grad_phase,
-                                                         zeros_for_w_phase)
-            temp_vb_grad_phase = cplx.make_complex_vector(vb_grad_phase,
-                                                          zeros_for_vb)
-            temp_hb_grad_phase = cplx.make_complex_vector(hb_grad_phase,
-                                                          zeros_for_hb_phase)
-
-            # Temp = U*psi(sigma)
-            temp = cplx.scalar_mult(
-                U, self.unnormalized_wavefunction(constructed_state))
-
-            A_weights_amp += cplx.MS_mult(temp, temp_w_grad_amp)
-            A_vb_amp += cplx.VS_mult(temp, temp_vb_grad_amp)
-            A_hb_amp += cplx.VS_mult(temp, temp_hb_grad_amp)
-
-            A_weights_phase += cplx.MS_mult(temp, temp_w_grad_phase)
-            A_vb_phase += cplx.VS_mult(temp, temp_vb_grad_phase)
-            A_hb_phase += cplx.VS_mult(temp, temp_hb_grad_phase)
-
-            # Rotated wavefunction.
-            B += temp
-
-        L_weights_amp = cplx.MS_divide(A_weights_amp, B)
-        L_vb_amp = cplx.VS_divide(A_vb_amp, B)
-        L_hb_amp = cplx.VS_divide(A_hb_amp, B)
-
-        L_weights_phase = cplx.MS_divide(A_weights_phase, B)
-        L_vb_phase = cplx.VS_divide(A_vb_phase, B)
-        L_hb_phase = cplx.VS_divide(A_hb_phase, B)
-
-        return [L_weights_amp, L_vb_amp, L_hb_amp, L_weights_phase, L_vb_phase,
-                L_hb_phase]
 
 ################################################################################
 ################################################################################
