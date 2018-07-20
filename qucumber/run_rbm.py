@@ -115,12 +115,11 @@ def generate(param_path, num_samples, k):
                     "in epochs; 0 means no logging"))
 @click.option('--seed', default=1234, show_default=True, type=int,
               help="random seed to initialize the RBM with")
-@click.option('--test-grads', is_flag=True)
 @click.option('--no-prog', is_flag=True)
 
 def train_complex(train_path, basis_path, true_psi_path, num_hidden_amp,
                   num_hidden_phase, epochs, pos_batch_size, neg_batch_size, k, learning_rate,
-                  log_every, seed, test_grads, no_prog):
+                  log_every, seed, no_prog):
     """Train an RBM with a phase."""
 
     train_set = np.loadtxt(train_path, dtype='float32')
@@ -168,7 +167,7 @@ def train_complex(train_path, basis_path, true_psi_path, num_hidden_amp,
                      num_visible=train_set.shape[-1],
                      num_hidden_amp=num_hidden_amp,
                      num_hidden_phase=num_hidden_phase,
-                     test_grads=test_grads)
+                     )
 
     rbm.fit(train_set, basis_set, unitary_dict, epochs, pos_batch_size, neg_batch_size,
             k=k, lr=learning_rate, log_every=log_every, progbar=(not no_prog))

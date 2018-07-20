@@ -378,9 +378,11 @@ def norm(x):
     """
     if list(x.size())[0] != 2:
         raise ValueError('An input is not of the right dimension.')
-
+    '''
     x_conj = torch.zeros_like(x)
     x_conj[0] = x[0]
     x_conj[1] = -x[1]
+    '''
+    #return scalar_mult(x_conj, x)[0]
+    return inner_prod(x, x)[0]
 
-    return scalar_mult(x_conj, x)[0]

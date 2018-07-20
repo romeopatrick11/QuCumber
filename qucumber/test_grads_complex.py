@@ -52,64 +52,50 @@ rbm_complex = ComplexRBM(full_unitaries=full_unitary_dictionary,
                          num_hidden_amp=num_hidden_amp,
                          num_hidden_phase=num_hidden_phase)
 
+print (rbm_complex.rbm_amp.weights)
+
 vis         = rbm_complex.rbm_amp.generate_visible_space()
+Z           = rbm_complex.rbm_amp.partition(vis)
 k           = 100
 eps         = 1.e-8
-alg_grads   = rbm_complex.compute_batch_gradients(unitary_dict, k, data, data, basis_data, basis_data)
+#alg_grads   = rbm_complex.compute_batch_gradients(unitary_dict, k, data, data, basis_data, basis_data)
+alg_grads   = rbm_complex.compute_exact_gradients_KL(unitary_dict, k, data, data, basis_data, basis_data, vis, Z)
+
 
 def compute_numerical_KL(visible_space, Z):
     '''Computes the total KL divergence.
     '''
     KL = 0.0
-    basis_list = ['Z' 'Z', 'X' 'Z', 'Z' 'X', 'Y' 'Z', 'Z' 'Y']
-
-    # Wavefunctions (RBM and true) in the computational basis.
-    # psi_ZZ      = self.normalized_wavefunction(visible_space)
-    # true_psi_ZZ = self.get_true_psi('ZZ')
+    #basis_list = ['Z' 'Z', 'X' 'Z', 'Z' 'X', 'Y' 'Z', 'Z' 'Y']
+    basis_list = ['Z' 'Z']
 
     #Compute the KL divergence for the non computational bases.
     for i in range(len(basis_list)):
-        rotated_RBM_psi = cplx.MV_mult(
+        rotated_RBM_psi  = cplx.MV_mult(
             full_unitary_dictionary[basis_list[i]],
             rbm_complex.normalized_wavefunction(visible_space, Z)).view(2,-1)
         rotated_true_psi = rbm_complex.get_true_psi(basis_list[i]).view(2,-1)
 
-        #print ("RBM >>> ", rotated_RBM_psi,"\n norm >>> ",cplx.norm(cplx.inner_prod(rotated_RBM_psi, rotated_RBM_psi)))
-        #print ("True >> ", rotated_true_psi)
-
         for j in range(len(visible_space)):
-            elementof_rotated_RBM_psi = torch.tensor(
+            elementof_rotated_RBM_psi  = torch.tensor(
                                         [rotated_RBM_psi[0][j],
                                          rotated_RBM_psi[1][j]]
                                         ).view(2, 1)
-
             elementof_rotated_true_psi = torch.tensor(
                                           [rotated_true_psi[0][j],
                                            rotated_true_psi[1][j]] 
                                           ).view(2, 1)
 
-            norm_true_psi = cplx.norm(cplx.inner_prod(
+            norm_true_psi = cplx.inner_prod(
                                       elementof_rotated_true_psi,
-                                      elementof_rotated_true_psi))
+                                      elementof_rotated_true_psi)[0]
 
-            norm_RBM_psi = cplx.norm(cplx.inner_prod(
+            norm_RBM_psi = cplx.inner_prod(
                                      elementof_rotated_RBM_psi,
-                                     elementof_rotated_RBM_psi))
-            '''
-            if norm_true_psi < 0.01 or norm_RBM_psi < 0.01:
-                print ('True >>> ',norm_true_psi)
-                print ('RBM >>> ', norm_RBM_psi)
-            '''
-            # TODO: numerical grads are NAN here if I don't do this if statement (july 16)
-            #if norm_true_psi>0.0 and norm_RBM_psi>0.0:
-            #print ('Basis      : ',basis_list[i])
-            #print ("Plus term  : ",norm_true_psi*torch.log(norm_true_psi))
-            #print ("Minus term : ",norm_true_psi*torch.log(norm_RBM_psi),'\n')
-
+                                     elementof_rotated_RBM_psi)[0]
+           
             KL += norm_true_psi*torch.log(norm_true_psi)
             KL -= norm_true_psi*torch.log(norm_RBM_psi)
-
-    #print ('KL >>> ',KL)
 
     return KL
 
@@ -147,7 +133,6 @@ def compute_numerical_gradient(batch, visible_space, param, alg_grad, Z):
               .format(num_gradNLL, num_gradKL, alg_grad[i]))
 
 def test_gradients(batch, visible_space, k, alg_grads):
-    # Must have negative sign because the compute_batch_grads returns the neg of the grads.
     # key_list = ["weights_amp", "visible_bias_amp", "hidden_bias_amp", "weights_phase", "visible_bias_phase", "hidden_bias_phase"]
 
     flat_weights_amp   = rbm_complex.rbm_amp.weights.data.view(-1)
@@ -162,31 +147,33 @@ def test_gradients(batch, visible_space, k, alg_grads):
 
     print('Weights amp gradient')
     compute_numerical_gradient(
-        batch, visible_space, flat_weights_amp, -flat_grad_weights_amp, Z)
+        batch, visible_space, flat_weights_amp, flat_grad_weights_amp, Z)
     print ('\n')
 
     print('Visible bias amp gradient')
     compute_numerical_gradient(
-        batch, visible_space, rbm_complex.rbm_amp.visible_bias, -alg_grads["rbm_amp"]["visible_bias"], Z)
+        batch, visible_space, rbm_complex.rbm_amp.visible_bias, alg_grads["rbm_amp"]["visible_bias"], Z)
     print ('\n')
 
     print('Hidden bias amp gradient')
     compute_numerical_gradient(
-        batch, visible_space, rbm_complex.rbm_amp.hidden_bias, -alg_grads["rbm_amp"]["hidden_bias"], Z)
+        batch, visible_space, rbm_complex.rbm_amp.hidden_bias, alg_grads["rbm_amp"]["hidden_bias"], Z)
     print ('\n')
 
     print('Weights phase gradient')
     compute_numerical_gradient(
-        batch, visible_space, flat_weights_phase, -flat_grad_weights_phase, Z)
+        batch, visible_space, flat_weights_phase, flat_grad_weights_phase, Z)
     print ('\n')
 
     print('Visible bias phase gradient')
     compute_numerical_gradient(
-        batch, visible_space, rbm_complex.rbm_phase.visible_bias, -alg_grads["rbm_phase"]["visible_bias"], Z)
+        batch, visible_space, rbm_complex.rbm_phase.visible_bias, alg_grads["rbm_phase"]["visible_bias"], Z)
     print ('\n')
 
     print('Hidden bias phase gradient')
     compute_numerical_gradient(
-        batch, visible_space, rbm_complex.rbm_phase.hidden_bias, -alg_grads["rbm_phase"]["hidden_bias"], Z)
+        batch, visible_space, rbm_complex.rbm_phase.hidden_bias, alg_grads["rbm_phase"]["hidden_bias"], Z)
 
+#Z  = rbm_complex.rbm_amp.partition(vis)
+#KL = compute_numerical_KL(vis, Z)
 test_gradients(data, vis, k, alg_grads)
